@@ -1,0 +1,85 @@
+.navbar{
+    padding: 20px 0px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+   
+}
+.navbar .logo{
+    width: 32px;
+    height: 32px;
+}
+.navbar li{
+     cursor: pointer;
+}
+.navbar-menu{
+    display: flex;
+    list-style: none;
+    gap: 20px;
+    color:rgb(42, 51, 231);
+    font-size: 18px;
+}
+.navbar-right{
+    display: flex;
+    align-items: center;
+    gap: 40px;
+}
+
+.search-logo{
+    width: 18px;
+    height: 18px;
+}
+.account-logo{
+    width: 32px;
+    height: 32px;
+}
+
+.navbar button{
+    background: transparent;
+    font-size: 16px;
+    color: rgb(42, 51, 231);
+    border: 1px solid black;
+    padding: 10px 30px;
+    border-radius: 50px;
+    cursor: pointer;
+    transition: all ease 0.3s;
+}
+
+.navbar button:hover{
+    background-color: aliceblue;
+}
+
+.navbar .active{
+    padding-bottom: 2px;
+    border-bottom: 2px solid rgb(42, 51, 231);
+}
+
+@media (max-width: 1600px) {
+    .navbar .logo{
+        width: 30px;
+    }
+    .navbar-menu{
+        gap: 15px;
+        font-size: 17px;
+    }
+    .navbar-right{
+        gap: 20px;
+    }
+     .navbar-right img{
+        gap: 30px;
+    }
+    .navbar-right button{
+        padding: 8px 25px;
+    }
+    
+}
+
+@media (max-width: 750px) {
+ 
+    .navbar-menu{
+        display: none
+    }
+
+    
+}
+
