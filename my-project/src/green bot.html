@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GreenBot: Green Management Consultant</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #eef2f6; /* Light gray-blue background */
+        }
+        /* Custom scrollbar for chat history */
+        #chat-history::-webkit-scrollbar {
+            width: 8px;
+        }
+        #chat-history::-webkit-scrollbar-thumb {
+            background-color: #cbd5e1; /* Gray-300 */
+            border-radius: 4px;
+        }
+        #chat-history::-webkit-scrollbar-track {
+            background-color: transparent;
+        }
+        /* Style for the typing indicator */
+        .dot {
+            width: 8px;
+            height: 8px;
+            background-color: #3b82f6;
+            border-radius: 50%;
+            display: inline-block;
+            margin: 0 2px;
+            animation: bounce 1.4s infinite ease-in-out both;
+        }
+        .dot:nth-child(1) { animation-delay: -0.32s; }
+        .dot:nth-child(2) { animation-delay: -0.16s; }
+        @keyframes bounce {
+            0%, 80%, 100% { transform: scale(0); }
+            40% { transform: scale(1); }
+        }
+    </style>
+</head>
+<body class="min-h-screen flex items-center justify-center p-4">
+
+    <div id="app" class="w-full max-w-2xl bg-white shadow-xl rounded-xl flex flex-col h-[90vh] md:h-[80vh]">
+        <!-- Header -->
+        <header class="p-4 bg-green-600 text-white rounded-t-xl shadow-md flex items-center justify-between">
+            <h1 class="text-xl font-bold flex items-center">
+                <svg class="w-6 h-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10m0-10l8-4m-8 4L4 7m8 4v10m0-10l8-4m-8 4L4 7m8 4v10m0-10l8-4m-8 4L4 7m8 4v10m0-10l8-4m-8 4L4 7m8 4v10m0-10l8-4m-8 4L4 7m8 4v10m0-10l8-4m-8 4L4 7m8 4v10m0-10l8-4m-8 4L4 7m8 4v10m0-10l8-4m-8 4L4 7m8 4v10m0-10l8-4m-8 4L4 7"></path>
+                </svg>
+                GreenBot Consultant
+            </h1>
+            <span class="text-sm opacity-80">Gemini 2.5 Flash Preview (Function Calling Only)</span>
+        </header>
+
+        <!-- Chat History -->
+        <div id="chat-history" class="flex-grow p-4 space-y-4 overflow-y-auto">
+            <!-- Initial Welcome Message -->
+            <div class="flex justify-start">
+                <div class="max-w-xs md:max-w-md p-3 rounded-xl bg-green-100 text-gray-800 shadow-sm">
+                    <p class="font-bold text-green-700">GreenBot:</p>
+                    <p id="welcome-message"></p>
+                </div>
+            </div>
+
+            <!-- Typing Indicator (Hidden by default) -->
+            <div id="typing-indicator" class="flex justify-start hidden">
+                <div class="max-w-xs md:max-w-md p-3 rounded-xl bg-gray-200 shadow-sm">
+                    <div class="flex items-center">
+                        <span class="dot"></span>
+                        <span class="dot"></span>
+                        <span class="dot"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Input Area -->
+        <div class="p-4 border-t border-gray-200">
+            <div class="flex space-x-3">
+                <input
+                    type="text"
+                    id="user-input"
+                    placeholder="Ask about sustainability, recycling, or calculate emissions..."
+                    class="flex-grow p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                    onkeydown="if(event.key === 'Enter') document.getElementById('send-button').click()"
+                >
+                <button
+                    id="send-button"
+                    class="px-4 py-3 bg-green-500 text-white font-semibold rounded-lg shadow-md hover:bg-green-600 transition duration-150 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed"
+                    onclick="sendMessage()"
+                >
+                    Send
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- 1. CONFIGURATION ---
+        const API_KEY = "AIzaSyB1rtVke0lNbL1k03y3rTqDxiXRuwP4tyA";
+        // Using the 'gemini-2.5-flash-preview-05-20' endpoint.
+        const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${API_KEY}`;
+        
+        // Chat History state
+        let conversationHistory = [];
+        let isSending = false;
+
+        // UI Elements
+        const chatHistoryEl = document.getElementById('chat-history');
+        const userInputEl = document.getElementById('user-input');
+        const sendButtonEl = document.getElementById('send-button');
+        const typingIndicatorEl = document.getElementById('typing-indicator');
+
+        // Initial welcome message (formatted for the user)
+        const WELCOME_TEXT = (
+            "Hello! I am **GreenBot**, your comprehensive **Green Management Consultant**. " +
+            "I can discuss sustainability, recycling, climate change, and renewable energy. " +
+            "I can also calculate your carbon emissions. " +
+            "\n\nTry asking: **'If I drove 500 km, what's my footprint in India?'**"
+        );
+        document.getElementById('welcome-message').innerHTML = formatMarkdown(WELCOME_TEXT);
+
+        // --- 2. SYSTEM INSTRUCTION & TOOL SETUP ---
+
+        // UPDATED: Strict system instruction to only answer questions related to green management
+        const SYSTEM_INSTRUCTION = (
+            "You are GreenBot, an **exclusive and specialized Green Management Consultant**. "
+            + "You must only answer questions directly related to **sustainability, environmental management, carbon footprint reduction, recycling, and renewable energy technologies**. "
+            + "If the user asks about an unrelated topic (e.g., sports, general news, math problems not involving emissions), you must politely decline and redirect them to a green management topic. "
+            + "Your primary function is to provide insightful information, practical advice, and accurate carbon emission calculations using the 'calculate_emissions' tool. "
+            + "Always provide calculation results in tonnes CO2e if over 1000 kg, or kg CO2e otherwise. Use standard mathematical notation for units (e.g., 'kg CO2e')."
+        );
+
+        // Function Declaration for the API payload
+        const FUNCTION_DECLARATION = {
+            name: "calculate_emissions",
+            description: (
+                "Calculates the carbon dioxide equivalent emissions for a specified activity (e.g., electricity, car_travel, flight). " +
+                "Use this whenever the user specifies a quantity (e.g., kWh, km) and the activity type or region."
+            ),
+            parameters: {
+                type: "OBJECT",
+                properties: {
+                    activity_type: {
+                        type: "STRING",
+                        description: "The type of activity: 'electricity', 'car_travel', or 'flight'."
+                    },
+                    value: {
+                        type: "NUMBER",
+                        description: "The amount of activity (e.g., kWh, or distance in km). Must be a positive number."
+                    },
+                    region: {
+                        type: "STRING",
+                        description: "The country or region code (e.g., 'USA', 'INDIA', 'EU'). Default to 'DEFAULT' if not explicitly stated."
+                    }
+                },
+                required: ["activity_type", "value"]
+            },
+        };
+
+        // Emission Factor Database (same as Python version)
+        const EMISSION_FACTORS = {
+            'electricity': {
+                'USA': 0.38, 'EU': 0.25, 'INDIA': 0.70, 'BRAZIL': 0.09, 'DEFAULT': 0.40 
+            },
+            'car_travel': { 'DEFAULT': 0.21 },
+            'flight': { 'DEFAULT': 0.12 }
+        };
+
+        // Local Python function re-implemented in JavaScript
+        function calculate_emissions({ activity_type, value, region = 'DEFAULT' }) {
+            try {
+                const typeKey = activity_type.toLowerCase();
+
+                if (!EMISSION_FACTORS[typeKey]) {
+                    return { error: `Unknown activity type: ${activity_type}` };
+                }
+
+                const factors = EMISSION_FACTORS[typeKey];
+                const regionKey = (region && region.toUpperCase()) || 'DEFAULT';
+                
+                const factor = factors[regionKey] || factors['DEFAULT'];
+                
+                if (value === null || value <= 0) {
+                    return { error: `Value for ${activity_type} must be positive.` };
+                }
+
+                const emissions_kg_co2e = value * factor;
+
+                let unit = '';
+                if (typeKey === 'electricity') unit = 'kWh';
+                else if (['car_travel', 'flight'].includes(typeKey)) unit = 'km';
+
+                return {
+                    activity_type: activity_type,
+                    value: value,
+                    region_used: regionKey,
+                    emission_factor_kg_co2e_per_unit: factor,
+                    unit_of_measure: unit,
+                    total_emissions_kg_co2e: Math.round(emissions_kg_co2e * 100) / 100
+                };
+            } catch (e) {
+                return { error: `Calculation failed: ${e.message}` };
+            }
+        }
+
+        const AVAILABLE_TOOLS = {
+            "calculate_emissions": calculate_emissions
+        };
+
+        // --- 3. UI UTILITIES ---
+
+        // Simple markdown formatting for console output
+        function formatMarkdown(text) {
+            // Bold
+            text = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+            // Newlines to break tags
+            text = text.replace(/\n/g, '<br>');
+            return text;
+        }
+
+        function displayMessage(text, role, toolCall = false) {
+            const isBot = role === 'model';
+            const messageClass = isBot ? 
+                'justify-start' : 'justify-end';
+            const bubbleClass = isBot ? 
+                'bg-green-100 text-gray-800' : 'bg-blue-500 text-white';
+            const nameClass = isBot ? 'font-bold text-green-700' : 'font-bold text-white';
+            const name = isBot ? 'GreenBot:' : 'You:';
+            
+            const messageEl = document.createElement('div');
+            messageEl.className = `flex ${messageClass}`;
+            
+            const bubbleEl = document.createElement('div');
+            bubbleEl.className = `max-w-xs md:max-w-md p-3 rounded-xl shadow-sm ${bubbleClass}`;
+            
+            if (!toolCall) {
+                bubbleEl.innerHTML = `<p class="${nameClass}">${name}</p><p>${formatMarkdown(text)}</p>`;
+            } else {
+                 // For system messages or tool calls
+                bubbleEl.className = 'max-w-xs md:max-w-md p-3 rounded-xl shadow-sm bg-gray-200 text-gray-800 italic text-sm';
+                bubbleEl.innerHTML = `<p class="text-xs text-gray-600 mb-1">⚙️ Tool Activity:</p><p>${text}</p>`;
+            }
+            
+            messageEl.appendChild(bubbleEl);
+            chatHistoryEl.appendChild(messageEl);
+            chatHistoryEl.scrollTop = chatHistoryEl.scrollHeight; // Auto-scroll
+        }
+        
+        function setSending(sending) {
+            isSending = sending;
+            sendButtonEl.disabled = sending;
+            userInputEl.disabled = sending;
+            if (sending) {
+                typingIndicatorEl.classList.remove('hidden');
+            } else {
+                typingIndicatorEl.classList.add('hidden');
+            }
+            chatHistoryEl.scrollTop = chatHistoryEl.scrollHeight;
+        }
+
+        // --- 4. API & CHAT LOGIC ---
+
+        async function sendToGemini(history) {
+            if (!API_KEY) {
+                displayMessage("Error: API Key is not set.", 'model', true);
+                return null;
+            }
+
+            // Using the canonical, top-level peer structure for the payload
+            const payload = {
+                contents: history,
+                systemInstruction: { parts: [{ text: SYSTEM_INSTRUCTION }] },
+                // Keeping only function calling tool.
+                tools: [
+                    { functionDeclarations: [FUNCTION_DECLARATION] }
+                ]
+            };
+
+            const maxRetries = 5;
+            for (let i = 0; i < maxRetries; i++) {
+                try {
+                    const response = await fetch(API_URL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    
+                    if (!response.ok) {
+                        const errorJson = await response.json();
+                        const errorMessage = errorJson?.error?.message || response.statusText;
+                        throw new Error(`API call failed with status: ${response.status} (${errorMessage})`);
+                    }
+
+                    const result = await response.json();
+                    const candidate = result.candidates?.[0];
+                    
+                    if (candidate && candidate.content) {
+                        return candidate;
+                    }
+                    console.warn("Warning: No valid candidate response from API");
+                    return null;
+
+                } catch (error) {
+                    console.error(`Attempt ${i + 1} failed: ${error.message}`);
+                    if (i === maxRetries - 1) {
+                        // Displaying a helpful message about the problem, as the issue is environmental/geographic, not fixable in code.
+                        displayMessage(
+                            `Gemini API Error: Max retries reached. The server is still reporting: **"${error.message}"**. This indicates an environmental issue (like geographic restriction) that prevents me from connecting to the model. While I've updated the instructions to focus strictly on green management, I cannot guarantee a response until this connection issue is resolved externally.`, 
+                            'model', 
+                            true
+                        );
+                        return null;
+                    }
+                    // Exponential backoff
+                    const delay = Math.pow(2, i) * 1000 + (Math.random() * 1000);
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                }
+            }
+            return null;
+        }
+
+        async function sendMessage() {
+            if (isSending) return;
+
+            const userText = userInputEl.value.trim();
+            if (!userText) return;
+
+            // 1. Display user message and clear input
+            displayMessage(userText, 'user');
+            userInputEl.value = '';
+            setSending(true);
+
+            // 2. Add user message to history
+            conversationHistory.push({
+                role: "user",
+                parts: [{ text: userText }]
+            });
+
+            // --- LOOP FOR FUNCTION CALLS (Multi-turn Tool Use) ---
+            let response = await sendToGemini(conversationHistory);
+
+            while (response && response.content && response.content.parts.some(p => p.functionCall)) {
+                
+                const functionCalls = response.content.parts
+                    .filter(p => p.functionCall)
+                    .map(p => p.functionCall);
+
+                // Add model's function call intent to history
+                conversationHistory.push({
+                    role: "model",
+                    parts: functionCalls.map(fc => ({ functionCall: fc }))
+                });
+
+                const toolResponses = [];
+                for (const call of functionCalls) {
+                    const functionName = call.name;
+                    const args = call.args || {};
+                    
+                    const callMessage = `GreenBot intends to call: ${functionName}(${JSON.stringify(args)})`;
+                    displayMessage(callMessage, 'system', true);
+
+                    // Execute the local JavaScript function
+                    const localFunction = AVAILABLE_TOOLS[functionName];
+                    let resultData = {};
+
+                    if (localFunction) {
+                        resultData = localFunction(args);
+                    } else {
+                        resultData = { error: `Function ${functionName} not found locally.` };
+                    }
+                    
+                    const resultMessage = `Tool ${functionName} returned: ${JSON.stringify(resultData)}`;
+                    displayMessage(resultMessage, 'system', true);
+
+                    // Add tool result to the list of responses
+                    toolResponses.push({
+                        functionResponse: {
+                            name: functionName,
+                            response: resultData
+                        }
+                    });
+                }
+
+                // Add tool results to history
+                conversationHistory.push({ role: "tool", parts: toolResponses });
+                
+                // Send tool results back to Gemini for final text generation
+                response = await sendToGemini(conversationHistory);
+            }
+
+            // --- Final Response ---
+            setSending(false);
+            if (response && response.content && response.content.parts.some(p => p.text)) {
+                const final_text = response.content.parts.find(p => p.text).text;
+                displayMessage(final_text, 'model');
+                
+                // Add the final model text response to history
+                conversationHistory.push({
+                    role: "model", 
+                    parts: [{ text: final_text }]
+                });
+            } else if (response) {
+                displayMessage("I received a response, but it didn't contain text. Try asking another question.", 'model');
+            }
+        }
+    </script>
+</body>
+</html>
